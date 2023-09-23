@@ -1,41 +1,38 @@
 #!/bin/bash
 
-# Este script coordena a execução de múltiplos processos para contar palavras em paralelo.
-
-# Verifica se o argumento com o diretório foi fornecido
-if [ -z "$1" ]; then
-    echo "Uso: $0 <diretório>"
-    exit 1
+if [ $# -lt 1 ]; then
+  echo "Usage: $0 <directory>"
+  exit 1
 fi
 
-# Diretório raiz
-root_dir=$1
+directory=$1
+numberOfWords=0
 
-# Inicializa a variável de contagem de palavras
-WC_COUNT=0
+# Get all subdirectories in the given directory.
+subdirs=$(find $directory -type d)
 
-# Função para contar as palavras em um diretório
-count_words_in_dir () {
-    local dir_path=$1
-    local count=0
+# Create a temporary file to store the results.
+tempFile=$(mktemp)
 
-    for filepath in $dir_path/*; do
-        if [ -f "$filepath" ]; then
-            count=$((count + $(wc -w < "$filepath")))
-        fi
-    done
+# Iterate over each subdirectory and start a process to count the words.
+for subdir in $subdirs; do
+  if [ "$subdir" == "$directory" ]; then
+      continue
+  fi
 
-    echo $count
-}
-
-# Itera sobre os subdiretórios
-for subdir in $root_dir/*; do
-    if [ -d "$subdir" ]; then
-        count=$(count_words_in_dir "$subdir")
-        WC_COUNT=$((WC_COUNT + count))
-    fi
+  # Start a process to count the words in the subdirectory.
+  go run ./word_count.go $subdir >> $tempFile &
 done
 
-# Imprime a contagem total
-echo "Total de palavras encontradas: $WC_COUNT"
+# Wait for all processes to finish.
+wait
+
+# Sum up the results from each process.
+while read line; do
+  numberOfWords=$((numberOfWords + line))
+done < $tempFile
+
+rm $tempFile
+
+echo $numberOfWords
 
