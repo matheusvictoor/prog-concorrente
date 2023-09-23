@@ -2,31 +2,15 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class WordCount {
     
-    // Calculate the number of words in the files stored under the directory name
-    // available at argv[1].
-    //
-    // Assume a depth 3 hierarchy:
-    //   - Level 1: root
-    //   - Level 2: subdirectories
-    //   - Level 3: files
-    //
-    // root
-    // ├── subdir 1
-    // │     ├── file
-    // │     ├── ...
-    // │     └── file
-    // ├── subdir 2
-    // │     ├── file
-    // │     ├── ...
-    // │     └── file
-    // ├── ...
-    // └── subdir N
-    // │     ├── file
-    // │     ├── ...
-    // │     └── file
+    private static ReentrantLock lock = new ReentrantLock();
+    private static int count = 0; 
+    
     public static void main(String[] args) {
         if (args.length != 1) {
             System.err.println("Usage: java WordCount <root_directory>");
@@ -36,18 +20,55 @@ public class WordCount {
         String rootPath = args[0];
         File rootDir = new File(rootPath);
         File[] subdirs = rootDir.listFiles();
-        int count = 0;
 
         if (subdirs != null) {
-            for (File subdir : subdirs) {
+	    
+     	    List<Thread> threads = new ArrayList<>();
+	    
+	    for (File subdir : subdirs) {
                 if (subdir.isDirectory()) {
-                    String dirPath = rootPath + "/" + subdir.getName();
-                    count += wcDir(dirPath);
+                    File[] files = subdir.listFiles();
+                    if (files != null) {
+                        for (File file : files) {
+                            if (file.isFile()) {
+                                Thread thread = new Thread(new MyThread(file.getAbsolutePath()));
+                                threads.add(thread);
+                                thread.start();
+                            }
+                        }
+                    }
+                }
+            }
+
+	    for (Thread thread : threads) {
+                try {
+                    thread.join();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
                 }
             }
         }
 
         System.out.println(count);
+    }
+
+    private static class MyThread implements Runnable {
+        private String filePath;
+
+	MyThread(String filePath){
+	    this.filePath = filePath;
+	}
+
+	@Override
+	public void run(){
+	    int localCount = wcFile(filePath);
+	    lock.lock();
+	    try {
+	    	count += localCount;
+	    } finally {
+	    	lock.unlock();
+	    }
+	}
     }
 
     public static int wc(String fileContent) {
@@ -72,21 +93,5 @@ public class WordCount {
             e.printStackTrace();
             return -1;
         }
-    }
-
-    public static int wcDir(String dirPath) {
-        File dir = new File(dirPath);
-        File[] files = dir.listFiles();
-        int count = 0;
-
-        if (files != null) {
-            for (File file : files) {
-                if (file.isFile()) {
-                    count += wcFile(file.getAbsolutePath());
-                }
-            }
-            return count;
-        }
-        return count;
     }
 }
